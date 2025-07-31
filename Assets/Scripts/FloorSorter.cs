@@ -54,7 +54,6 @@ public class FloorSorter : EditorWindow
         GameObject sidewayParent = CreateOrFindParent("Sideway", floorParent);
         GameObject stonewayParent = CreateOrFindParent("Stoneway", floorParent);
         GameObject sidewalkParent = CreateOrFindParent("Sidewalk", floorParent);
-        GameObject sidewalkParent = CreateOrFindParent("Sidewalk", floorParent);
         
         // Get all GameObjects in the scene
         GameObject[] allObjects = FindObjectsOfType<GameObject>();
@@ -292,6 +291,7 @@ public class AutoFloorSorter
         GameObject streetsParent = CreateOrFindParent("Streets", floorParent);
         GameObject sidewayParent = CreateOrFindParent("Sideway", floorParent);
         GameObject stonewayParent = CreateOrFindParent("Stoneway", floorParent);
+        GameObject sidewalkParent = CreateOrFindParent("Sidewalk", floorParent);
         
         GameObject[] allObjects = Object.FindObjectsOfType<GameObject>();
         int sortedCount = 0;
