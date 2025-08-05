@@ -12,8 +12,7 @@ GameObject:
   - component: {fileID: 33637381823808560}
   - component: {fileID: 23776185747029052}
   - component: {fileID: 64875578417754578}
-  - component: {fileID: 1192834672477921869}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: street
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -110,37 +109,6 @@ MeshCollider:
   m_Convex: 0
   m_CookingOptions: 30
   m_Mesh: {fileID: 4300000, guid: 72e65272e9752d842a914dd27fd86306, type: 3}
---- !u!114 &1192834672477921869
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1224574634684750}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 83aeccf531c2ca34c8c326a887df1689, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  streetPrefabPatterns:
-  - Street
-  - Walkway
-  - Sideway
-  - Stoneway
-  connectionTolerance: 2
-  intersectionTolerance: 1
-  waypointSpacing: 5
-  laneOffset: 3
-  showDebugGizmos: 1
-  streetColor: {r: 0, g: 0, b: 1, a: 1}
-  connectionColor: {r: 0, g: 1, b: 0, a: 1}
-  intersectionColor: {r: 1, g: 0, b: 0, a: 1}
-  gizmoSize: 1
-  detectedStreets: []
-  intersections: []
-  totalStreetsFound: 0
-  totalConnections: 0
-  totalIntersections: 0
 --- !u!1 &1573730805894322
 GameObject:
   m_ObjectHideFlags: 0
@@ -150,7 +118,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4533943726500818}
-  m_Layer: 0
+  - component: {fileID: 5179221272258464302}
+  m_Layer: 6
   m_Name: Street 3 Prefab
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -173,3 +142,24 @@ Transform:
   - {fileID: 4040797355963638}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!65 &5179221272258464302
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1573730805894322}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 4, y: 0, z: 4}
+  m_Center: {x: 0, y: 0, z: 0}
