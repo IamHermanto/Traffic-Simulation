@@ -1101,6 +1101,7 @@ GameObject:
   - component: {fileID: 9153517903126727109}
   - component: {fileID: 8585347259461813427}
   - component: {fileID: 7637114080237288338}
+  - component: {fileID: 5680804580157775623}
   m_Layer: 0
   m_Name: Car
   m_TagString: Untagged
@@ -1197,14 +1198,61 @@ MonoBehaviour:
   rearRightWheel: {fileID: 2049610089102699640}
   frontLeftMesh: {fileID: 0}
   frontRightMesh: {fileID: 0}
-  rearWheelsMesh: {fileID: 0}
+  rearLeftMesh: {fileID: 0}
+  rearRightMesh: {fileID: 0}
   maxMotorTorque: 1500
-  maxSteerAngle: 30
+  maxSteerAngle: 15
   maxBrakeTorque: 3000
+  enableBehaviorLogging: 1
+  logSteeringDecisions: 1
+  logSpeedDecisions: 1
+  logLaneChanges: 1
+  logIntersections: 1
+  logPathFollowing: 1
+  loggingInterval: 1
+  aggressiveTurning: 0
+  maxSteerAnglePerFrame: 2
+  turnSlowdownFactor: 0.3
+  turnDetectionAngle: 15
+  straightRoadSpeedMultiplier: 5
+  straightRoadMinDistance: 6
+  enableSpeedBoost: 1
   path: []
   currentNodeIndex: 0
   stoppingDistance: 2
   detectionRange: 5
+  nodeReachDistance: 2
+  despawnDelay: 1
+  maxLookAheadDistance: 4
+  pathRecalculateInterval: 2
+  enableLaneChangeSafety: 1
+  laneWidth: 3
+  laneChangeSafetyDistance: 8
+  sideScanDistance: 10
+  strictRoadFollowing: 1
+  roadWidthTolerance: 3
+  intersectionDetectionRange: 6
+  intersectionSlowdownFactor: 0.4
+  intersectionStopDistance: 1.5
+  otherCarDetectionRange: 4
+  obstacleCheckInterval: 0.1
+--- !u!114 &5680804580157775623
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7648921860294127363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1bf1c647f3ebe2b438100feab6e29223, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  saveToFile: 1
+  logFileName: car_behavior_log.txt
+  maxFileSizeMB: 10
+  clearLogOnStart: 1
+  includeTimestamps: 1
 --- !u!1 &7954159993152962014
 GameObject:
   m_ObjectHideFlags: 0

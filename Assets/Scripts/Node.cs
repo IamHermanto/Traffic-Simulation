@@ -15,6 +15,10 @@ public class Node : MonoBehaviour
     public NodeType nodeType = NodeType.Normal;
     public float nodeSize = 0.5f;
     
+    [Header("Lane Identification")]
+    [Tooltip("Visual indicator for which lane this node belongs to")]
+    public bool showLaneInfo = true;
+    
     [Header("Connection Settings")]
     [Tooltip("Maximum distance to automatically connect to other nodes")]
     public float connectionDistance = 8f;
@@ -48,7 +52,7 @@ public class Node : MonoBehaviour
     private List<Node> cachedNeighbors = new List<Node>();
     private bool neighborsCached = false;
     private float lastNeighborRefresh = 0f;
-    private float neighborRefreshInterval = 5f; // Refresh every 5 seconds
+    private float neighborRefreshInterval = 5f;
     
     public int fCost { get { return gCost + hCost; } }
     
@@ -58,7 +62,8 @@ public class Node : MonoBehaviour
         
         if (debugMode)
         {
-            Debug.Log($"Node {name} initialized with {GetNeighbors().Count} neighbors");
+            string lane = GetLane();
+            Debug.Log($"Node {name} initialized with {GetNeighbors().Count} neighbors, Lane: {lane}");
         }
     }
     
@@ -73,7 +78,6 @@ public class Node : MonoBehaviour
     
     public List<Node> GetNeighbors()
     {
-        // Return cached neighbors if available and recent
         if (neighborsCached && Time.time - lastNeighborRefresh < neighborRefreshInterval)
         {
             return new List<Node>(cachedNeighbors);
@@ -81,6 +85,55 @@ public class Node : MonoBehaviour
         
         RefreshNeighbors();
         return new List<Node>(cachedNeighbors);
+    }
+    
+    /// <summary>
+    /// Get which lane this node belongs to
+    /// </summary>
+    public string GetLane()
+    {
+        string nodeName = name.ToLower();
+        
+        // Check by name prefix
+        if (nodeName.StartsWith("leftlane_") || nodeName.Contains("left"))
+        {
+            return "Left";
+        }
+        
+        if (nodeName.StartsWith("rightlane_") || nodeName.Contains("right"))
+        {
+            return "Right";
+        }
+        
+        // Check by parent tilemap name
+        Transform parent = transform.parent;
+        if (parent != null)
+        {
+            string parentName = parent.name.ToLower();
+            if (parentName.Contains("left"))
+            {
+                return "Left";
+            }
+            if (parentName.Contains("right"))
+            {
+                return "Right";
+            }
+        }
+        
+        return "Center"; // Intersection or center nodes
+    }
+    
+    /// <summary>
+    /// Check if this node is in the same lane as another node
+    /// </summary>
+    public bool IsInSameLane(Node otherNode)
+    {
+        if (otherNode == null) return false;
+        
+        string thisLane = GetLane();
+        string otherLane = otherNode.GetLane();
+        
+        return thisLane == otherLane && thisLane != "Center";
     }
     
     void RefreshNeighbors()
@@ -105,7 +158,6 @@ public class Node : MonoBehaviour
             float distance = Vector3.Distance(transform.position, node.transform.position);
             if (distance <= connectionDistance)
             {
-                // Simple validation without calling IsIntersectionNode() to avoid stack overflow
                 if (IsValidConnection(node, distance))
                 {
                     cachedNeighbors.Add(node);
@@ -119,17 +171,11 @@ public class Node : MonoBehaviour
         if (debugMode)
         {
             Debug.Log($"Node {name} refreshed: {cachedNeighbors.Count} neighbors found");
-            foreach (Node neighbor in cachedNeighbors)
-            {
-                Debug.Log($"  → Connected to: {neighbor.name} (distance: {Vector3.Distance(transform.position, neighbor.transform.position):F1})");
-            }
         }
     }
     
     bool IsValidConnection(Node otherNode, float distance)
     {
-        // Basic validation without circular dependencies
-        
         // Don't connect if too far vertically (different road levels)
         float heightDifference = Mathf.Abs(transform.position.y - otherNode.transform.position.y);
         if (heightDifference > 2f)
@@ -137,7 +183,6 @@ public class Node : MonoBehaviour
             return false;
         }
         
-        // Simple distance check - no intersection logic here to avoid recursion
         return distance <= connectionDistance;
     }
     
@@ -145,13 +190,11 @@ public class Node : MonoBehaviour
     {
         if (forceIntersection) return true;
         
-        // Use cached neighbors count to avoid recursion
         if (neighborsCached)
         {
             return cachedNeighbors.Count >= intersectionThreshold;
         }
         
-        // If not cached, do a simple count without full neighbor refresh
         return GetBasicNeighborCount() >= intersectionThreshold;
     }
     
@@ -178,9 +221,6 @@ public class Node : MonoBehaviour
         return count;
     }
     
-    /// <summary>
-    /// Gets the spawn direction for cars spawning at this node
-    /// </summary>
     public Vector3 GetSpawnDirection()
     {
         Vector3 direction = ConvertSpawnDirectionToVector(spawnDirection);
@@ -198,15 +238,43 @@ public class Node : MonoBehaviour
         switch (direction)
         {
             case SpawnDirection.North:
-                return Vector3.forward;    // (0, 0, 1)
+                return Vector3.forward;
             case SpawnDirection.South:
-                return Vector3.back;       // (0, 0, -1)
+                return Vector3.back;
             case SpawnDirection.East:
-                return Vector3.right;      // (1, 0, 0)
+                return Vector3.right;
             case SpawnDirection.West:
-                return Vector3.left;       // (-1, 0, 0)
+                return Vector3.left;
             default:
                 return Vector3.forward;
+        }
+    }
+    
+    [ContextMenu("Debug Lane Info")]
+    public void DebugLaneInfo()
+    {
+        Debug.Log("=== LANE DEBUG INFO ===");
+        Debug.Log($"Node: {name}");
+        Debug.Log($"Lane: {GetLane()}");
+        Debug.Log($"Position: {transform.position}");
+        Debug.Log($"Parent: {(transform.parent != null ? transform.parent.name : "None")}");
+        
+        Debug.Log($"Same-lane neighbors:");
+        foreach (Node neighbor in GetNeighbors())
+        {
+            if (IsInSameLane(neighbor))
+            {
+                Debug.Log($"  - {neighbor.name} ({neighbor.GetLane()})");
+            }
+        }
+        
+        Debug.Log($"Cross-lane connections:");
+        foreach (Node neighbor in GetNeighbors())
+        {
+            if (!IsInSameLane(neighbor) && neighbor.GetLane() != "Center")
+            {
+                Debug.Log($"  - {neighbor.name} ({neighbor.GetLane()})");
+            }
         }
     }
     
@@ -216,64 +284,6 @@ public class Node : MonoBehaviour
         neighborsCached = false;
         RefreshNeighbors();
         Debug.Log($"Node {name}: Forced neighbor refresh. Found {cachedNeighbors.Count} neighbors.");
-    }
-    
-    [ContextMenu("Debug Node Info")]
-    public void DebugNodeInfo()
-    {
-        Debug.Log("=== NODE DEBUG INFO ===");
-        Debug.Log($"Node: {name}");
-        Debug.Log($"Position: {transform.position}");
-        Debug.Log($"Type: {nodeType}");
-        Debug.Log($"Is Intersection: {IsIntersectionNode()}");
-        Debug.Log($"Connection Distance: {connectionDistance}");
-        Debug.Log($"Neighbors ({GetNeighbors().Count}):");
-        
-        foreach (Node neighbor in GetNeighbors())
-        {
-            float dist = Vector3.Distance(transform.position, neighbor.transform.position);
-            Debug.Log($"  → {neighbor.name} (distance: {dist:F1}, type: {neighbor.nodeType})");
-        }
-        
-        Debug.Log($"Manual Connections ({manualConnections.Count}):");
-        foreach (Node manual in manualConnections)
-        {
-            if (manual != null)
-            {
-                float dist = Vector3.Distance(transform.position, manual.transform.position);
-                Debug.Log($"  → {manual.name} (distance: {dist:F1}) [MANUAL]");
-            }
-        }
-    }
-    
-    [ContextMenu("Find Nearest Intersection")]
-    public void FindNearestIntersection()
-    {
-        Node[] allNodes = FindObjectsOfType<Node>();
-        Node nearestIntersection = null;
-        float nearestDistance = float.MaxValue;
-        
-        foreach (Node node in allNodes)
-        {
-            if (node != this && node.IsIntersectionNode())
-            {
-                float distance = Vector3.Distance(transform.position, node.transform.position);
-                if (distance < nearestDistance)
-                {
-                    nearestDistance = distance;
-                    nearestIntersection = node;
-                }
-            }
-        }
-        
-        if (nearestIntersection != null)
-        {
-            Debug.Log($"Nearest intersection to {name}: {nearestIntersection.name} (distance: {nearestDistance:F1})");
-        }
-        else
-        {
-            Debug.Log($"No intersections found near {name}");
-        }
     }
     
     void OnDrawGizmos()
@@ -288,6 +298,12 @@ public class Node : MonoBehaviour
         {
             Gizmos.color = new Color(nodeColor.r, nodeColor.g, nodeColor.b, 0.3f);
             Gizmos.DrawSphere(transform.position, nodeSize * 0.8f);
+        }
+        
+        // Draw lane indicator
+        if (showLaneInfo)
+        {
+            DrawLaneIndicator();
         }
         
         // Draw connections
@@ -324,6 +340,30 @@ public class Node : MonoBehaviour
         }
     }
     
+    void DrawLaneIndicator()
+    {
+        string lane = GetLane();
+        Vector3 pos = transform.position + Vector3.up * 1.2f;
+        
+        switch (lane)
+        {
+            case "Left":
+                Gizmos.color = Color.blue;
+                Gizmos.DrawRay(pos, Vector3.left * 1f);
+                break;
+                
+            case "Right":
+                Gizmos.color = Color.cyan;
+                Gizmos.DrawRay(pos, Vector3.right * 1f);
+                break;
+                
+            case "Center":
+                Gizmos.color = Color.yellow;
+                Gizmos.DrawWireSphere(pos, 0.3f);
+                break;
+        }
+    }
+    
     void DrawConnections()
     {
         List<Node> neighbors = GetNeighbors();
@@ -332,33 +372,27 @@ public class Node : MonoBehaviour
         {
             if (neighbor == null) continue;
             
-            // Different colors for different connection types
-            if (manualConnections.Contains(neighbor))
+            // Color connections based on whether they're same-lane or cross-lane
+            if (IsInSameLane(neighbor))
+            {
+                Gizmos.color = Color.green; // Same lane connections
+            }
+            else if (manualConnections.Contains(neighbor))
             {
                 Gizmos.color = Color.magenta; // Manual connections
             }
-            else if (IsIntersectionNode() || neighbor.IsIntersectionNode())
+            else if (GetLane() == "Center" || neighbor.GetLane() == "Center")
             {
-                Gizmos.color = new Color(1f, 0.5f, 0f); // Orange for intersection connections
+                Gizmos.color = Color.yellow; // Intersection connections
             }
             else
             {
-                Gizmos.color = Color.cyan; // Regular connections
+                Gizmos.color = Color.red; // Cross-lane connections
             }
             
-            // Draw line with slight offset to avoid z-fighting
             Vector3 start = transform.position + Vector3.up * 0.1f;
             Vector3 end = neighbor.transform.position + Vector3.up * 0.1f;
             Gizmos.DrawLine(start, end);
-            
-            // Draw arrow for direction
-            Vector3 direction = (end - start).normalized;
-            Vector3 arrowPoint = end - direction * 0.5f;
-            Vector3 arrowSide1 = arrowPoint + Vector3.Cross(direction, Vector3.up) * 0.2f;
-            Vector3 arrowSide2 = arrowPoint - Vector3.Cross(direction, Vector3.up) * 0.2f;
-            
-            Gizmos.DrawLine(end, arrowSide1);
-            Gizmos.DrawLine(end, arrowSide2);
         }
     }
     
@@ -366,7 +400,6 @@ public class Node : MonoBehaviour
     {
         Vector3 direction = GetSpawnDirection();
         
-        // Color code the arrow based on direction
         switch (spawnDirection)
         {
             case SpawnDirection.North:
@@ -383,32 +416,28 @@ public class Node : MonoBehaviour
                 break;
         }
         
-        // Draw spawn direction arrow
         Gizmos.DrawRay(transform.position, direction * 2f);
-        
-        // Draw arrow head
-        Vector3 arrowHead1 = direction * 1.5f + Vector3.Cross(direction, Vector3.up) * 0.3f;
-        Vector3 arrowHead2 = direction * 1.5f - Vector3.Cross(direction, Vector3.up) * 0.3f;
-        Gizmos.DrawLine(transform.position + direction * 2f, transform.position + arrowHead1);
-        Gizmos.DrawLine(transform.position + direction * 2f, transform.position + arrowHead2);
     }
     
     void DrawNeighborCount()
     {
         #if UNITY_EDITOR
         Vector3 labelPos = transform.position + Vector3.up * 1.5f;
+        
+        string lane = GetLane();
         string label = $"{GetNeighbors().Count}";
         if (IsIntersectionNode())
         {
-            label += " (I)"; // Mark intersections
+            label += " (I)";
         }
+        label += $" [{lane}]";
+        
         UnityEditor.Handles.Label(labelPos, label);
         #endif
     }
     
     void OnValidate()
     {
-        // Refresh neighbors when values change in inspector
         if (Application.isPlaying)
         {
             neighborsCached = false;
