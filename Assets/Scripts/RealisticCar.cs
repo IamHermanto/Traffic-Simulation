@@ -37,6 +37,13 @@ public class RealisticCar : MonoBehaviour
     public float maxLookAheadDistance = 4f; // Reduced to prevent shortcuts
     public float pathRecalculateInterval = 2f;
     
+    [Header("Lane Changing System")]
+    public float laneChangeDetectionRange = 6f; // Distance to check for lane changes
+    public float targetLaneCheckRadius = 2.5f; // Radius to check target lane occupation
+    public float laneChangeWaitTime = 0.5f; // Minimum wait time before retrying lane change
+    public float laneChangeSlowdownFactor = 0.3f; // Speed when waiting for lane change
+    public bool debugLaneChanges = true;
+    
     [Header("Road Constraint")]
     public bool strictRoadFollowing = true; // Force follow road network
     public float maxSteerAnglePerFrame = 2f; // Prevent sharp steering
@@ -60,6 +67,12 @@ public class RealisticCar : MonoBehaviour
     bool isAtIntersection = false;
     bool shouldYieldAtIntersection = false;
     bool isOffRoad = false;
+    
+    // Lane changing variables
+    bool isWaitingForLaneChange = false;
+    float laneChangeWaitTimer = 0f;
+    Node targetLaneNode = null;
+    bool isLaneChangeBlocked = false;
     
     private float obstacleCheckTimer;
     private float pathRecalculateTimer;
@@ -147,6 +160,7 @@ public class RealisticCar : MonoBehaviour
                 CheckForObstacles();
                 CheckForOtherCars();
                 CheckRoadConstraints();
+                CheckLaneChangeOpportunity(); // NEW: Lane change system
                 obstacleCheckTimer = 0f;
             }
             
@@ -166,10 +180,161 @@ public class RealisticCar : MonoBehaviour
                 pathRecalculateTimer = 0f;
             }
             
+            // Lane change wait timer
+            if (isWaitingForLaneChange)
+            {
+                laneChangeWaitTimer += Time.deltaTime;
+                if (laneChangeWaitTimer >= laneChangeWaitTime)
+                {
+                    // Reset wait state and try again
+                    isWaitingForLaneChange = false;
+                    laneChangeWaitTimer = 0f;
+                }
+            }
+            
             AIController();
         }
         
         UpdateWheelMeshes();
+    }
+    
+    /// <summary>
+    /// NEW: Check if car wants to change lanes and if it's safe to do so
+    /// </summary>
+    void CheckLaneChangeOpportunity()
+    {
+        // Don't check lane changes if we're already waiting
+        if (isWaitingForLaneChange) return;
+        
+        // Get upcoming lane change node
+        Node upcomingNode = GetUpcomingLaneChangeNode();
+        if (upcomingNode == null)
+        {
+            isLaneChangeBlocked = false;
+            targetLaneNode = null;
+            return;
+        }
+        
+        targetLaneNode = upcomingNode;
+        
+        // Check if target lane is occupied
+        bool isTargetLaneOccupied = IsLaneOccupied(upcomingNode);
+        
+        if (isTargetLaneOccupied)
+        {
+            isLaneChangeBlocked = true;
+            isWaitingForLaneChange = true;
+            laneChangeWaitTimer = 0f;
+            
+            if (debugLaneChanges)
+            {
+                Debug.Log($"Car {gameObject.name}: Lane change to {upcomingNode.name} BLOCKED - waiting for clear path");
+            }
+        }
+        else
+        {
+            isLaneChangeBlocked = false;
+            isWaitingForLaneChange = false;
+            
+            if (debugLaneChanges && targetLaneNode != null)
+            {
+                Debug.Log($"Car {gameObject.name}: Lane change to {upcomingNode.name} CLEAR - proceeding");
+            }
+        }
+    }
+    
+    /// <summary>
+    /// NEW: Find if there's an upcoming lane change in our path
+    /// </summary>
+    Node GetUpcomingLaneChangeNode()
+    {
+        if (currentNodeIndex >= path.Count - 1) return null;
+        
+        // Look ahead for potential lane changes
+        for (int i = currentNodeIndex; i < Mathf.Min(currentNodeIndex + 3, path.Count); i++)
+        {
+            if (path[i] == null) continue;
+            
+            float distanceToNode = Vector3.Distance(transform.position, path[i].transform.position);
+            
+            // If this node is within lane change detection range, check if it's a lane change
+            if (distanceToNode <= laneChangeDetectionRange && IsLaneChangeNode(path[i]))
+            {
+                return path[i];
+            }
+        }
+        
+        return null;
+    }
+    
+    /// <summary>
+    /// NEW: Determine if a node represents a lane change (simplified logic)
+    /// </summary>
+    bool IsLaneChangeNode(Node node)
+    {
+        // A node is considered a lane change if:
+        // 1. It has multiple neighbors (more than 2)
+        // 2. OR it has "Lane" in its name (for multi-lane intersections)
+        // 3. OR the angle between current direction and target direction is significant
+        
+        if (node.name.ToLower().Contains("lane"))
+        {
+            return true;
+        }
+        
+        // Check if this node has multiple paths (potential lane choice)
+        List<Node> neighbors = node.GetNeighbors();
+        if (neighbors.Count > 2)
+        {
+            return true;
+        }
+        
+        // Check angle change - if we're turning more than a certain angle, consider it a lane change
+        if (currentNodeIndex < path.Count - 1)
+        {
+            Vector3 currentDirection = transform.forward;
+            Vector3 targetDirection = (node.transform.position - transform.position).normalized;
+            
+            float angle = Vector3.Angle(currentDirection, targetDirection);
+            if (angle > 25f) // Threshold for considering it a lane change
+            {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /// <summary>
+    /// NEW: Check if a lane/node is occupied by another car
+    /// </summary>
+    bool IsLaneOccupied(Node targetNode)
+    {
+        if (targetNode == null) return true;
+        
+        Vector3 checkPosition = targetNode.transform.position;
+        
+        // Check for cars in the target lane
+        Collider[] carsInLane = Physics.OverlapSphere(checkPosition, targetLaneCheckRadius);
+        
+        foreach (Collider col in carsInLane)
+        {
+            RealisticCar otherCar = col.GetComponent<RealisticCar>();
+            if (otherCar != null && otherCar != this)
+            {
+                // Additional check: make sure the other car is actually moving/active
+                if (otherCar.isMoving)
+                {
+                    if (debugLaneChanges)
+                    {
+                        Debug.Log($"Lane at {targetNode.name} occupied by {otherCar.name}");
+                    }
+                    return true;
+                }
+            }
+        }
+        
+        return false; // Lane is clear
     }
     
     public void SetPath(List<Node> newPath)
@@ -184,6 +349,12 @@ public class RealisticCar : MonoBehaviour
         currentNodeIndex = 0;
         isMoving = true;
         targetEndNode = newPath[newPath.Count - 1];
+        
+        // Reset lane change state
+        isWaitingForLaneChange = false;
+        isLaneChangeBlocked = false;
+        targetLaneNode = null;
+        laneChangeWaitTimer = 0f;
         
         AlignToRoadDirection();
         Debug.Log($"Car received path with {newPath.Count} nodes to {targetEndNode.name}");
@@ -201,6 +372,12 @@ public class RealisticCar : MonoBehaviour
         currentNodeIndex = 0;
         isMoving = true;
         targetEndNode = newPath[newPath.Count - 1];
+        
+        // Reset lane change state
+        isWaitingForLaneChange = false;
+        isLaneChangeBlocked = false;
+        targetLaneNode = null;
+        laneChangeWaitTimer = 0f;
         
         hasInitialAlignment = true;
         alignmentTime = 0f;
@@ -442,6 +619,17 @@ public class RealisticCar : MonoBehaviour
                 Debug.Log($"SPEED BOOST: Straight road detected! Speed: {speedMultiplier:F1}x");
         }
         
+        // NEW: Lane change blocking - slow down if waiting for lane change
+        if (isLaneChangeBlocked || isWaitingForLaneChange)
+        {
+            speedMultiplier *= laneChangeSlowdownFactor;
+            
+            if (debugLaneChanges)
+            {
+                Debug.Log($"LANE CHANGE WAIT: Slowing to {speedMultiplier:F1}x speed");
+            }
+        }
+        
         // Slow down if off-road
         if (isOffRoad)
         {
@@ -484,13 +672,15 @@ public class RealisticCar : MonoBehaviour
             speedMultiplier *= approachPenalty;
         }
         
-        float motorInput = (isBlocked || shouldYieldAtIntersection) ? 0f : speedMultiplier;
+        // Final motor input calculation
+        bool shouldStop = isBlocked || shouldYieldAtIntersection || (isLaneChangeBlocked && !isWaitingForLaneChange);
+        float motorInput = shouldStop ? 0f : speedMultiplier;
         
         ApplySteering(steerInput);
         ApplyMotor(motorInput);
         
-        // Node progression - only advance if close enough
-        if (distanceToCurrentNode < nodeReachDistance)
+        // Node progression - only advance if close enough AND not blocked by lane change
+        if (distanceToCurrentNode < nodeReachDistance && !isLaneChangeBlocked)
         {
             currentNodeIndex++;
             
@@ -586,6 +776,11 @@ public class RealisticCar : MonoBehaviour
         {
             path = newPath;
             currentNodeIndex = 0;
+            
+            // Reset lane change state when path changes
+            isWaitingForLaneChange = false;
+            isLaneChangeBlocked = false;
+            targetLaneNode = null;
             
             if (debugIntersections)
                 Debug.Log($"Recalculated path: {newPath.Count} nodes");
@@ -710,6 +905,35 @@ public class RealisticCar : MonoBehaviour
             // Draw speed boost effect
             Gizmos.color = new Color(1f, 1f, 0f, 0.3f);
             Gizmos.DrawSphere(transform.position, 1.5f);
+        }
+        
+        // NEW: Lane change visualization
+        if (targetLaneNode != null)
+        {
+            if (isLaneChangeBlocked || isWaitingForLaneChange)
+            {
+                // Red if blocked/waiting
+                Gizmos.color = Color.red;
+                Gizmos.DrawWireSphere(targetLaneNode.transform.position, targetLaneCheckRadius);
+                
+                // Draw line to blocked lane
+                Gizmos.color = new Color(1f, 0f, 0f, 0.5f);
+                Gizmos.DrawLine(transform.position, targetLaneNode.transform.position);
+                
+                // Draw wait indicator above car
+                Gizmos.color = Color.red;
+                Gizmos.DrawWireCube(transform.position + Vector3.up * 2.5f, Vector3.one * 0.3f);
+            }
+            else
+            {
+                // Green if clear
+                Gizmos.color = Color.green;
+                Gizmos.DrawWireSphere(targetLaneNode.transform.position, targetLaneCheckRadius);
+                
+                // Draw line to clear lane
+                Gizmos.color = new Color(0f, 1f, 0f, 0.5f);
+                Gizmos.DrawLine(transform.position, targetLaneNode.transform.position);
+            }
         }
         
         // Current target (should be very close to current node)

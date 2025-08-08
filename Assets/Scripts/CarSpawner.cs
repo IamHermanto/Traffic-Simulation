@@ -12,6 +12,11 @@ public class CarSpawner : MonoBehaviour
     public bool continuousSpawning = true;
     public int maxCarsInScene = 10; // Limit cars for performance
     
+    [Header("Collision Detection")]
+    public float spawnCheckRadius = 2f; // Radius to check for existing cars
+    public LayerMask carLayerMask = -1; // Which layers to check for cars
+    public bool debugSpawnChecks = true;
+    
     [Header("Simulation Settings")]
     public bool randomizeDestinations = true;
     public bool debugSpawning = true;
@@ -87,20 +92,47 @@ public class CarSpawner : MonoBehaviour
             return;
         }
         
-        // Pick random start and end nodes
-        Node randomStartNode = cachedStartNodes[Random.Range(0, cachedStartNodes.Count)];
-        Node randomEndNode = cachedEndNodes[Random.Range(0, cachedEndNodes.Count)];
+        // Try to find a free spawn point
+        int maxAttempts = cachedStartNodes.Count; // Try all start nodes if needed
+        int attempts = 0;
         
-        // Don't spawn if start and end are the same (in case a node is both start and end)
-        if (randomStartNode == randomEndNode && cachedEndNodes.Count > 1)
+        while (attempts < maxAttempts)
         {
-            // Pick a different end node
-            do {
-                randomEndNode = cachedEndNodes[Random.Range(0, cachedEndNodes.Count)];
-            } while (randomEndNode == randomStartNode);
+            // Pick random start and end nodes
+            Node randomStartNode = cachedStartNodes[Random.Range(0, cachedStartNodes.Count)];
+            Node randomEndNode = cachedEndNodes[Random.Range(0, cachedEndNodes.Count)];
+            
+            // Don't spawn if start and end are the same (in case a node is both start and end)
+            if (randomStartNode == randomEndNode && cachedEndNodes.Count > 1)
+            {
+                // Pick a different end node
+                do {
+                    randomEndNode = cachedEndNodes[Random.Range(0, cachedEndNodes.Count)];
+                } while (randomEndNode == randomStartNode);
+            }
+            
+            // Check if spawn location is free
+            if (IsSpawnLocationFree(randomStartNode))
+            {
+                SpawnCarAtNode(randomStartNode, randomEndNode);
+                return; // Successfully spawned, exit
+            }
+            else
+            {
+                if (debugSpawnChecks)
+                {
+                    Debug.Log($"Spawn location blocked at {randomStartNode.name}, trying another...");
+                }
+            }
+            
+            attempts++;
         }
         
-        SpawnCarAtNode(randomStartNode, randomEndNode);
+        // If we get here, all spawn points are blocked
+        if (debugSpawning)
+        {
+            Debug.Log("All spawn locations are blocked, skipping this spawn cycle");
+        }
     }
     
     void SpawnCarsOnAllStartNodes()
@@ -112,8 +144,21 @@ public class CarSpawner : MonoBehaviour
         }
         
         int spawnedCount = 0;
+        int blockedCount = 0;
+        
         foreach (Node startNode in cachedStartNodes)
         {
+            // Check if spawn location is free
+            if (!IsSpawnLocationFree(startNode))
+            {
+                blockedCount++;
+                if (debugSpawnChecks)
+                {
+                    Debug.Log($"Spawn location blocked at {startNode.name}, skipping");
+                }
+                continue;
+            }
+            
             Node targetEndNode;
             
             if (randomizeDestinations)
@@ -133,8 +178,50 @@ public class CarSpawner : MonoBehaviour
         
         if (debugSpawning)
         {
-            Debug.Log($"Spawned {spawnedCount} cars on {cachedStartNodes.Count} start nodes");
+            Debug.Log($"Spawned {spawnedCount} cars on {cachedStartNodes.Count} start nodes ({blockedCount} locations were blocked)");
         }
+    }
+    
+    /// <summary>
+    /// Check if a spawn location is free of other cars
+    /// </summary>
+    /// <param name="spawnNode">The node to check</param>
+    /// <returns>True if location is free, false if blocked</returns>
+    bool IsSpawnLocationFree(Node spawnNode)
+    {
+        if (spawnNode == null) return false;
+        
+        Vector3 checkPosition = spawnNode.transform.position + Vector3.up * spawnHeight;
+        
+        // Check for existing cars in the spawn area
+        Collider[] overlappingColliders = Physics.OverlapSphere(checkPosition, spawnCheckRadius, carLayerMask);
+        
+        foreach (Collider col in overlappingColliders)
+        {
+            // Check if it's a car
+            RealisticCar existingCar = col.GetComponent<RealisticCar>();
+            if (existingCar != null)
+            {
+                if (debugSpawnChecks)
+                {
+                    Debug.Log($"Spawn location at {spawnNode.name} blocked by car: {existingCar.name}");
+                }
+                return false;
+            }
+            
+            // Also check for any Car components (in case you're using the old Car script)
+            Car oldCar = col.GetComponent<Car>();
+            if (oldCar != null)
+            {
+                if (debugSpawnChecks)
+                {
+                    Debug.Log($"Spawn location at {spawnNode.name} blocked by old car: {oldCar.name}");
+                }
+                return false;
+            }
+        }
+        
+        return true; // Location is free
     }
     
     void SpawnCarAtNode(Node startNode, Node endNode)
@@ -142,6 +229,16 @@ public class CarSpawner : MonoBehaviour
         if (startNode == null || endNode == null) 
         {
             Debug.LogWarning("SpawnCarAtNode: Invalid start or end node");
+            return;
+        }
+        
+        // Double-check spawn location is still free (in case something changed)
+        if (!IsSpawnLocationFree(startNode))
+        {
+            if (debugSpawnChecks)
+            {
+                Debug.LogWarning($"Spawn location at {startNode.name} became blocked, aborting spawn");
+            }
             return;
         }
         
@@ -235,7 +332,8 @@ public class CarSpawner : MonoBehaviour
         Debug.Log($"Start Nodes ({cachedStartNodes.Count}):");
         foreach (Node node in cachedStartNodes)
         {
-            Debug.Log($"  - {node.name} at {node.transform.position} facing {node.GetSpawnDirection()}");
+            bool isFree = IsSpawnLocationFree(node);
+            Debug.Log($"  - {node.name} at {node.transform.position} facing {node.GetSpawnDirection()} [Free: {isFree}]");
         }
         
         Debug.Log($"End Nodes ({cachedEndNodes.Count}):");
@@ -243,6 +341,33 @@ public class CarSpawner : MonoBehaviour
         {
             Debug.Log($"  - {node.name} at {node.transform.position}");
         }
+    }
+    
+    [ContextMenu("Check All Spawn Locations")]
+    void CheckAllSpawnLocations()
+    {
+        RefreshNodeCache();
+        Debug.Log("=== SPAWN LOCATION STATUS ===");
+        
+        int freeLocations = 0;
+        int blockedLocations = 0;
+        
+        foreach (Node startNode in cachedStartNodes)
+        {
+            bool isFree = IsSpawnLocationFree(startNode);
+            if (isFree)
+            {
+                freeLocations++;
+                Debug.Log($"✓ {startNode.name}: FREE");
+            }
+            else
+            {
+                blockedLocations++;
+                Debug.Log($"✗ {startNode.name}: BLOCKED");
+            }
+        }
+        
+        Debug.Log($"Summary: {freeLocations} free, {blockedLocations} blocked out of {cachedStartNodes.Count} spawn points");
     }
     
     // Public method to get current car count
@@ -263,5 +388,30 @@ public class CarSpawner : MonoBehaviour
         }
         
         Debug.Log($"Spawn interval adjusted to {spawnInterval} seconds");
+    }
+    
+    // Visualize spawn check areas in Scene view
+    void OnDrawGizmosSelected()
+    {
+        if (cachedStartNodes.Count > 0)
+        {
+            foreach (Node startNode in cachedStartNodes)
+            {
+                if (startNode == null) continue;
+                
+                Vector3 checkPosition = startNode.transform.position + Vector3.up * spawnHeight;
+                
+                // Color code: Green = free, Red = blocked
+                bool isFree = Application.isPlaying ? IsSpawnLocationFree(startNode) : true;
+                Gizmos.color = isFree ? Color.green : Color.red;
+                
+                // Draw spawn check radius
+                Gizmos.DrawWireSphere(checkPosition, spawnCheckRadius);
+                
+                // Draw spawn position
+                Gizmos.color = isFree ? new Color(0, 1, 0, 0.3f) : new Color(1, 0, 0, 0.3f);
+                Gizmos.DrawSphere(checkPosition, 0.5f);
+            }
+        }
     }
 }
